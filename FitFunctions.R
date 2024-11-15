@@ -1,3 +1,5 @@
+library(nimble)
+
 # This function takes in raw data, checks it for inconsistencies
 # Outputs several useful derived quantities
 
@@ -29,10 +31,17 @@ prepare_SESCR_NIMBLE <- function(camera_locs, times, cameras, ids, params,
   
   s = sum(events_per_stream > 0)
   
+  # Mask
+  # Generate Random points within rectangular study area
+  rpts = matrix(0, nrow = nrand, ncol = 2)
+  rpts[, 1] = runif(nrand, bounds[1], bounds[2])
+  rpts[, 2] = runif(nrand, bounds[3], bounds[4])
+  
+  
   # Calculate area of Survey region
   area = (bounds[2] - bounds[1]) * (bounds[4] - bounds[3])
   
-  # initial estimates for activity centers are the mean of the observatio locations
+  # initial estimates for activity centers are the mean of the observation locations
   a = matrix(0, nrow = m, ncol= 3)
   for (i in 1:length(ids)){
     An = ids[i]
@@ -43,7 +52,7 @@ prepare_SESCR_NIMBLE <- function(camera_locs, times, cameras, ids, params,
   a[, 1:2] = a[, 1:2] / a[,3]
   a = a[, 1:2]
   
-  output <- list(N = N, m = m, area = area, s = s, obsA = a)
+  output <- list(N = N, m = m, area = area, s = s, obsA = a, rpts = rpts, nrand = nrand)
   
   return(output)
 }
@@ -60,7 +69,7 @@ dSESCR_DA <- nimbleFunction(
                  z = double(1), # binary indicators for unobserved animals
                  M = integer(0), # super-population size
                  psi = double(0), # probability that unobserved animals exist
-                 g0 = double(0), # detection rate at ac for the baseline
+                 lambda0 = double(0), # detection rate at ac for the baseline
                  beta = double(0), # self-excitement decay rate
                  Dratio = double(0), # d/sigma
                  a = double(2), # activity centers
@@ -159,13 +168,13 @@ dSESCR_DA <- nimbleFunction(
       }
     }
     
-    nll = nll - Nobs * log(g0)
+    nll = nll - Nobs * log(lambda0)
     
     
     
     # First two terms of NLL: Sum of the Integral of Lambda for all streams
-    nll = nll + (sum(spike_sums) - sum(decay_sums)) * (g0 / beta) # spikes and decay areas
-    nll = nll + sum(DF) * (g0 * duration) # baseline
+    nll = nll + (sum(spike_sums) - sum(decay_sums)) * (lambda0 / beta) # spikes and decay areas
+    nll = nll + sum(DF) * (lambda0 * duration) # baseline
     
     #CONTRIBUTION TO LIKELIHOOD FROM UNDETECTED ANIMALS
     
@@ -177,7 +186,7 @@ dSESCR_DA <- nimbleFunction(
           dist2 = loci[1]^2 + loci[2]^2
           DFR = DFR + exp(-dist2/(2*sigma^2))
         }
-        nll = nll + g0*duration*DFR
+        nll = nll + lambda0*duration*DFR
       }
     }
     
@@ -203,8 +212,8 @@ mcSESCR_DA <- nimbleCode({
   
   
   psi ~ dbeta(1,1)
-  g0 ~ dunif(1e-20, 1)
-  beta ~ dunif(0.1, 1000)
+  lambda0 ~ dunif(1e-20, 1)
+  beta ~ dunif(1e-10, 1000)
   Dratio ~ dunif(1e-10, 1)
   sigma ~ dunif(log(0.5*sqrt(area)), 10)
   
@@ -215,10 +224,10 @@ mcSESCR_DA <- nimbleCode({
   
   # Likelihood
   Sigma <- sqrt(1/(2*exp(sigma)))
-  Beta <- beta
+  Beta <- 1/beta
   events[,] ~ dSESCR_DA(N = N, m = m, Nobs = Nobs, area = area,
                          camera_locations = camera_locations[,],
-                         z = z[], M = M, psi = psi, g0 = g0, beta = Beta,
+                         z = z[], M = M, psi = psi, lambda0 = lambda0, beta = Beta,
                          Dratio = Dratio, a = a[,], sigma = Sigma)
   
   Nind <- sum(z[1:(M-m)]) + m

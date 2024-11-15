@@ -1,7 +1,7 @@
 // Semi-complete likelihood for SESCR
 // Activity Centers marginalized from likelihood
 // Realised not expected population
-// Last Updated 31 Oct 2024
+// Last Updated 15 November 2024
 
 #include <TMB.hpp>
 #include <math.h> //for pi
@@ -31,18 +31,18 @@ Type objective_function<Type>::operator() ()
   
   
   // Parameters
-  PARAMETER(log_M); // log(M-m)
+  PARAMETER(log_N); // log(N-m)
   PARAMETER(log_sigma); // log of home range size
   PARAMETER(logit_d); // logit of d/sigma
   PARAMETER(log_beta); // log of beta
-  PARAMETER(log_g0); // log of g0
+  PARAMETER(log_lambda0); // log of lambda0
   
   // Convert parameters to standard scales
-  Type M = exp(log_M) + m;
+  Type N = exp(log_N) + m;
   Type sigma = exp(log_sigma);
   Type Dratio = exp(logit_d) / (Type(1.) + exp(logit_d));
   Type beta = exp(log_beta);
-  Type g0 = exp(log_g0);
+  Type lambda0 = exp(log_lambda0);
   
   
   // Indexing scheme:
@@ -148,7 +148,7 @@ Type objective_function<Type>::operator() ()
     // log(lambda)
     for(int j = 0; j < Nobs; j++){
       int An = animals[j];
-      ILL[An] -= log(g0);
+      ILL[An] -= log(lambda0);
       int C = cameras[j];
       // Calculate lambda at the time of detection
       if (last_cameras[j] == (-1)){
@@ -160,13 +160,13 @@ Type objective_function<Type>::operator() ()
     
     //Integrals of Lambdas
     for(int ani = 0; ani < m; ani++){
-      ILL[ani] += DFsum * g0 * duration; //baseline
-      ILL[ani] += (spike_sums[ani] - decay_sums[ani]) * (g0 / beta); // spikes and decreases
+      ILL[ani] += DFsum * lambda0 * duration; //baseline
+      ILL[ani] += (spike_sums[ani] - decay_sums[ani]) * (lambda0 / beta); // spikes and decreases
       ELK[ani] += exp(-ILL[ani]);
     }
     
     //Computations for likelihood of non-observed animals
-    IDP += (Type(1.) - exp(-duration * DFsum * g0));
+    IDP += (Type(1.) - exp(-duration * DFsum * lambda0));
   }
   
   ELK *= (area / nrand);
@@ -176,17 +176,17 @@ Type objective_function<Type>::operator() ()
   IDP /= nrand; // Average probability of detection
   
   
-  // Calculate M choose m
-  Type Mp1 = M + 1;
+  // Calculate N choose m
+  Type Mp1 = N + 1;
   Type mp1 = m + 1;
-  Type Mlmp1 = M - m + 1;
+  Type Mlmp1 = N - m + 1;
   Type lMCm = lgamma(Mp1) - lgamma(mp1) - lgamma(Mlmp1);
   nll -= lMCm;
-  nll -= (M - m) * log(Type(1.) - IDP);
+  nll -= (N - m) * log(Type(1.) - IDP);
   
-  ADREPORT(M);
+  ADREPORT(N);
   ADREPORT(beta);
-  ADREPORT(g0);
+  ADREPORT(lambda0);
   ADREPORT(sigma);
   ADREPORT(Dratio);
   
