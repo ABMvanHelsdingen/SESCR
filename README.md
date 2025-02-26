@@ -1,5 +1,5 @@
 # SESCR
-Code and Data for *A Hawkes-type Model extending Spatial Capture-Recapture*, Biometrics, 2025*
+Code and Data for *A Spatial Capture-Recapture Model with Hawkes-inspired Detection Rates to account for dependencies between traps*, Biometrics, 2025*
 
 ## Simulations
 Sim-SESCR.R and Sim-OU.R simulate data for Sections 3.1 and 3.2 respectively. Sim-SCR.R simulates data for Web Appendix C. 
