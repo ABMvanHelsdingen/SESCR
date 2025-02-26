@@ -77,27 +77,27 @@ SESCROgata <- function(mu, alpha, beta, d, stream, mu0, N, t){
 
 # Simulate SESCR model (with exponential kernels)
 
-simSESCR <- function(M, mu0, beta, d, sigma, camera_locations, t,
-                       a = NULL){
+simSESCR <- function(N, mu0, beta, d, sigma, camera_locations, t,
+                       s = NULL){
   
-  # M: true population
+  # N: true population
   # mu0: baseline background detection rate for the MHP
   # beta: rate of temporal decay in self-excitement
   # d: covariance for SE between cameras (2x2)
   # sigma: covariance for activity ranges (2x2)
-  # camera_locations: locations of cameras (Nx2)
+  # camera_locations: locations of cameras (Jx2)
   # t: latest possible detection time
-  # a: activity centers (Mx2)
+  # s: activity centers (Nx2)
   
   # Simulate activity centers (unless provided) 
   # Study area is a unit square from (0,0) to (1,1)
-  if (length(a) == 0){
-    a = matrix(runif(M*2,0,1), nrow=M, ncol=2)
+  if (length(s) == 0){
+    s = matrix(runif(N*2,0,1), nrow=N, ncol=2)
   }
   
   # check arguments
   if(ncol(camera_locations) != 2){
-    stop("camera_locations must be a Nx2 matrix")
+    stop("camera_locations must be a Jx2 matrix")
   }
   if(nrow(sigma) != 2 || ncol(sigma) != 2){
     stop("sigma must be a 2x2 matrix")
@@ -114,12 +114,12 @@ simSESCR <- function(M, mu0, beta, d, sigma, camera_locations, t,
          and zero covariance")
   }
   
-  N <- nrow(camera_locations)
+  J <- nrow(camera_locations)
   n <- 0 # number of animals with observations
   
   # Calculate spatial self-excitement
-  sse <- matrix(0, nrow = N, ncol = N)
-  for(x in 1:N){
+  sse <- matrix(0, nrow = J, ncol = J)
+  for(x in 1:J){
     for(y in 1:x){
       distance <- camera_locations[x, ] - camera_locations[y, ]
       sse[x,y] <- mnormt::dmnorm(x = distance, varcov = d)
@@ -134,18 +134,18 @@ simSESCR <- function(M, mu0, beta, d, sigma, camera_locations, t,
   observed <- numeric(0)
   
   # for each animal:
-  for(i in 1:M){
+  for(i in 1:N){
     # Calculate mu for MHP
-    mus <- numeric(N)
-    for(j in 1:N){
-      distance <- camera_locations[j, ] - a[i, ]
+    mus <- numeric(J)
+    for(j in 1:J){
+      distance <- camera_locations[j, ] - s[i, ]
       mus[j] <- mnormt::dmnorm(x = distance, varcov = sigma)
     }
     mus <- mu0 * mus
     
     # Generate MHP
     result <- SESCROgata(mu = mus, alpha = 1, beta = beta, 
-                         d = sse, mu0 = mu0, N = N, t = t)
+                         d = sse, mu0 = mu0, N = J, t = t)
     if (length(result$times) > 0){ # If animal is detected
       n <- n + 1
       observed <- append(observed, n)
@@ -162,27 +162,22 @@ simSESCR <- function(M, mu0, beta, d, sigma, camera_locations, t,
 }
 
 ### SCR ###
-simSCR <- function(M, mu0, sigma, camera_locations, t,
-                   a = NULL){
+simSCR <- function(N, mu0, sigma, camera_locations, t,
+                   s = NULL){
   # Simulate Continuous-Time SCR
   # Study area is a unit square from (0,0) to (1,1)
   
-  # M: true population
-  # mu0: baseline background detection rate for the MHP
-  # sigma: covariance for activity ranges (2x2)
-  # camera_locations: locations of cameras (Nx2)
-  # t: latest possible detection time
-  # a: activity centers (Mx2)
+  # see simSESCR() for parameter definitions
   
   
   # Simulate activity centers (unless provided)
-  if (length(a) == 0){
-    a = matrix(runif(M*2,0,1), nrow=M, ncol=2)
+  if (length(s) == 0){
+    s = matrix(runif(N*2,0,1), nrow=N, ncol=2)
   }
   
   # check arguments
   if(ncol(camera_locations) != 2){
-    stop("camera_locations must be a Nx2 matrix")
+    stop("camera_locations must be a Jx2 matrix")
   }
   if(nrow(sigma) != 2 || ncol(sigma) != 2){
     stop("sigma must be a 2x2 matrix")
@@ -192,7 +187,7 @@ simSCR <- function(M, mu0, sigma, camera_locations, t,
          and zero covariance")
   }
   
-  N <- nrow(camera_locations)
+  J <- nrow(camera_locations)
   n <- 0 # number of animals with observations
   
   
@@ -202,11 +197,11 @@ simSCR <- function(M, mu0, sigma, camera_locations, t,
   animals <- numeric(0)
   
   # for each animal:
-  for(i in 1:M){
+  for(i in 1:N){
     # Calculate mu for MHP
-    mus <- numeric(N)
-    for(j in 1:N){
-      distance <- camera_locations[j, ] - a[i, ]
+    mus <- numeric(J)
+    for(j in 1:J){
+      distance <- camera_locations[j, ] - s[i, ]
       mus[j] <- mnormt::dmnorm(x = distance, varcov = sigma)
     }
     mus <- mu0 * mus
@@ -218,7 +213,7 @@ simSCR <- function(M, mu0, sigma, camera_locations, t,
       n <- n + 1
       times <- append(times, result)
       animals <- append(animals, rep(n, length(result)))
-      cameras <- append(cameras, sample(c(1:N), size = length(result), replace = TRUE,
+      cameras <- append(cameras, sample(c(1:J), size = length(result), replace = TRUE,
                                         prob = mus/sum(mus)))
     }
   }
@@ -247,12 +242,12 @@ sim.ou <- function(mu, tau, sigma, n.steps, start = NULL){
   out
 }
 
-simOU <- function(M, epsilon=0.004, tau=100, sigma=0.2, camera_locations, t,
-                  a = NULL, freq = 10, mode = 1){
+simOU <- function(N, epsilon=0.004, tau=100, sigma=0.2, camera_locations, t,
+                  s = NULL, freq = 10, mode = 1){
   
   # Simulate activity centers (unless provided)
-  if (length(a) == 0){
-    a = matrix(runif(M*2,0,1), nrow=M, ncol=2)
+  if (length(s) == 0){
+    s = matrix(runif(N*2,0,1), nrow=N, ncol=2)
   }
   # empty vectors for storing simulations
   times <- numeric(0)
@@ -260,8 +255,8 @@ simOU <- function(M, epsilon=0.004, tau=100, sigma=0.2, camera_locations, t,
   animals <- numeric(0)
   n <- 0
   if (mode == 1){ # Every 1/freq units, animals are observed, jitter applied
-    for(i in 1:M){
-      locs <- sim.ou(mu = a[i,], tau = tau * freq, sigma = sigma, n.steps = freq * t)
+    for(i in 1:N){
+      locs <- sim.ou(mu = s[i,], tau = tau * freq, sigma = sigma, n.steps = freq * t)
       dists <- crossdist(locs[, 1], locs[, 2], camera_locations[, 1], camera_locations[, 2])
       dets <- which(dists < epsilon, arr.ind = TRUE)
       dets[,1] <- (dets[,1] + runif(nrow(dets),-1,0))/freq
@@ -273,8 +268,8 @@ simOU <- function(M, epsilon=0.004, tau=100, sigma=0.2, camera_locations, t,
       }
     }
   } else { # The animals are observed at a rate of freq
-    for(i in 1:M){
-      locs <- sim.ou2(mu = a[i,], tau = freq * tau, sigma = sigma, n.steps = freq * t)
+    for(i in 1:N){
+      locs <- sim.ou2(mu = s[i,], tau = freq * tau, sigma = sigma, n.steps = freq * t)
       dists <- crossdist(locs[, 1], locs[, 2], camera_locations[, 1], camera_locations[, 2])
       dets <- which(dists < epsilon, arr.ind = TRUE)
       if (nrow(dets) > 0){

@@ -1,7 +1,7 @@
 // Semi-complete likelihood for SESCR
 // Activity Centers marginalized from likelihood
 // Realised not expected population
-// Last Updated 15 November 2024
+// Last Updated 26 February 2025
 
 #include <TMB.hpp>
 #include <math.h> //for pi
@@ -14,9 +14,9 @@ Type objective_function<Type>::operator() ()
   using namespace density; // MVNORM
   
   //Data
-  DATA_INTEGER(N); // Number of cameras
+  DATA_INTEGER(J); // Number of cameras
   DATA_INTEGER(m); // Number of detected individuals
-  DATA_INTEGER(Nobs); // Number of observations
+  DATA_INTEGER(K); // Number of observations
   DATA_INTEGER(nrand); // Number of points in mask
   DATA_SCALAR(area); // area of survey area
   DATA_MATRIX(camera_locations); // coordinates of cameras
@@ -38,7 +38,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER(log_lambda0); // log of lambda0
   
   // Convert parameters to standard scales
-  Type N = exp(log_N) + m;
+  Type N = exp(log_N) + Type(m);
   Type sigma = exp(log_sigma);
   Type Dratio = exp(logit_d) / (Type(1.) + exp(logit_d));
   Type beta = exp(log_beta);
@@ -52,11 +52,11 @@ Type objective_function<Type>::operator() ()
   Type dist2 = 0;
   
   // Matrix of spatial self-excitement between cameras
-  matrix<Type> sse(N,N);
+  matrix<Type> sse(J,J);
   Type d = Dratio * sigma;
   
-  for(int i = 0; i < N; i++){
-    for(int k = i; k < N; k++){
+  for(int i = 0; i < J; i++){
+    for(int k = i; k < J; k++){
       loci = camera_locations.row(i) - camera_locations.row(k);
       dist2 = pow(loci[0],2) + pow(loci[1],2);
       sse(i,k) = exp(-dist2/(2*pow(d,2))) / pow(Dratio,2);
@@ -66,19 +66,19 @@ Type objective_function<Type>::operator() ()
   
   
   
-  Type duration = times[Nobs]; // survey duration
+  Type duration = times[K]; // survey duration
   
   
   // A[ani, j] determines the self-exciting effect of animal ani at event j
   // The other variables are used to calculate the sums of the integral for each stream
   
-  matrix<Type> A(m,(Nobs+1)); A.setZero();
+  matrix<Type> A(m,(K+1)); A.setZero();
   vector<Type> decay_marks(m); decay_marks.setZero();
   vector<Type> spike_marks(m); spike_marks.setZero();
   vector<Type> decay_sums(m); decay_sums.setZero();
   vector<Type> spike_sums(m); spike_sums.setZero();
   
-  for(int j = 1; j < (Nobs+1); j++){
+  for(int j = 1; j < (K+1); j++){
     int An = animals[(j-1)];
     for(int ani = 0; ani < m; ani++){
       if (ani == An){
@@ -103,21 +103,21 @@ Type objective_function<Type>::operator() ()
             
   // At end of survey, all exponential curves remaining end
   for(int ani = 0; ani < m; ani++){
-    spike_sums[ani] = spike_sums[ani] - spike_marks[ani] * A(ani,Nobs);
+    spike_sums[ani] = spike_sums[ani] - spike_marks[ani] * A(ani,K);
   }
   
   
   // DF and decay marks depend on the activity center
   vector<Type> ILL(m); // Individual log-likelihoods
   vector<Type> ELK(m); ELK.setZero();// Expected likelihoods
-  vector<Type> DF(N); // baseline rate at each camera
+  vector<Type> DF(J); // baseline rate at each camera
   //Type ENDP = 0; //Expected probability of non-detection
   Type IDP = 0; // Integrated Detection probability
   Type DFsum = 0; // sum of all baseline rates
   for(int x = 0; x < nrand; x++){
     ILL.setZero();
     // Baseline rates
-    for(int i = 0; i < N; ++i){
+    for(int i = 0; i < J; ++i){
       loci = camera_locations.row(i) - mask.row(x);
       dist2 = pow(loci[0],2) + pow(loci[1],2);
       DF[i] = exp(-dist2/(2*pow(sigma,2)));
@@ -126,7 +126,7 @@ Type objective_function<Type>::operator() ()
     
     // Decay mark
     decay_sums.setZero(); decay_marks.setZero();
-    for(int j = 1; j < (Nobs+1); j++){
+    for(int j = 1; j < (K+1); j++){
       int An = animals[(j-1)]; // Indivdual detected last
       // Areas of spikes and decays (spikes done before loop)
       // Animal seen at observation j - 1 needs a new (truncated) exponential decay curve to begin
@@ -141,12 +141,12 @@ Type objective_function<Type>::operator() ()
     // At end of survey, all exponential curves remaining end
     // The very last event does not create a spike and decay
     for(int ani = 0; ani < m; ani++){
-      decay_sums[ani] -= decay_marks[ani] * A(ani, Nobs);
+      decay_sums[ani] -= decay_marks[ani] * A(ani, K);
     }
     
     
     // log(lambda)
-    for(int j = 0; j < Nobs; j++){
+    for(int j = 0; j < K; j++){
       int An = animals[j];
       ILL[An] -= log(lambda0);
       int C = cameras[j];

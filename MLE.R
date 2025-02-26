@@ -1,14 +1,15 @@
 # Fit SCR and SESCR to pregenerated data, using TMB and MLE
-# Last Updated: 15 November 2024
+# Last Updated: 26 February 2025
 
 # This block is designed to be run on the NeSI server
 args <- commandArgs(trailingOnly = TRUE)
 N <- as.numeric(args[1])
 
 # To be adjusted as appropriate
-n_sims <- 10
-source1 <- "OU" # name of folder for storing results (OU,PR or SCR)
-source2 <- "OUSCR" # name of folder where simulations stored (OUSCR, SESCR or SCR)
+n_sims <- 8
+mask_size <- 4000; runs <- 20
+source1 <- "PR" # name of folder for storing results (OU,PR or SCR)
+source2 <- "SESCR" # name of folder where simulations stored (OUSCR, SESCR or SCR)
 
 
 library(coda)
@@ -32,13 +33,12 @@ camera_locations = as.matrix(read.csv(paste(source2,"Sims/Cameras_",N,".csv",sep
 
 
 # Output Data frame
-output <- as.data.frame(matrix(0, nrow = nrow(pars), ncol = 31))
+output <- as.data.frame(matrix(0, nrow = nrow(pars), ncol = 28))
 names(output) <- c("n_cameras", "N_true", "t", "sigma_true", 
-                   "mu0_true", "beta_true", "d_true",
-                   "n_obs", "m", "C_obs", "m_1obs", "m_maxobs", "m_1C", "m_maxC",
+                   "mu0_true", "beta_true", "d_true", "n_obs", "m", "C_obs",
                    "N_scr", "N_scr_se", "sigma_scr", "sigma_scr_se", "lambda0_scr",
                    "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "d",
-                   "scr_ran", "N_better", "sigma_better", "run", "runtime")
+                   "scr_ran", "N_better", "sigma_better", "mask_size", "runs","runtime")
 
 if (source1 == "OU"){
   names(output)[5:7] <- c("epsilon_true", "beta_true", "NULL")
@@ -71,7 +71,7 @@ for(i in 1:nrow(pars)){
   
   # Summary of the Data
   output$n_cameras[i] <- nrow(camera_locations)
-  output$N_true[i] <- pars$M[i]
+  output$N_true[i] <- pars$N[i]
   output$t[i] <- pars$t[i]
   output$sigma_true[i] <- pars$sigma[i]
   
@@ -91,15 +91,6 @@ for(i in 1:nrow(pars)){
   output$m[i] <- m
   output$C_obs[i] <- length(unique(cameras))
   
-  tab <- table(ids)
-  output$m_1obs[i] <- sum(tab == 1)
-  output$m_maxobs[i] <- max(tab)
-  
-  TWTable = table(ids, cameras) > 0
-  CPI = rowSums(TWTable) # cameras per individual
-  
-  output$m_1C[i] <- sum(CPI == 1)
-  output$m_maxC[i] <- max(CPI)
   
   out_scr <- tryCatch(
     {
@@ -141,7 +132,7 @@ for(i in 1:nrow(pars)){
   
   # Pre-Processing function
   out <- prepare_SESCR_NIMBLE(camera_locs = camera_locations, times = times, cameras = cameras,
-                              ids = ids, bounds = bounds, nrand=4000)
+                              ids = ids, bounds = bounds, nrand=mask_size)
   
   # Data as list
   
@@ -156,7 +147,7 @@ for(i in 1:nrow(pars)){
     
   }
   
-  data <- list(N = out$N, m = out$m, Nobs = length(times) - 1, area = out$area,
+  data <- list(J = out$J, m = out$m, K = length(times) - 1, area = out$area,
                camera_locations = camera_locations, times = events[,1],
                cameras = events[,2] - 1, animals = events[,3] - 1, last_cameras = events[,4] - 1,
                nrand = out$nrand, mask = out$rpts)
@@ -164,12 +155,12 @@ for(i in 1:nrow(pars)){
   # parameter starting points
   NLL <- Inf
   t0 <- Sys.time()
-  for(run in 1:20){
+  for(run in 1:runs){
     
     out_tmb <- tryCatch(
       {
         # parameter starting points
-        param <- list(log_N = log(runif(1,0.01,2)*m), log_sigma = log(runif(1,0.5,2) * output[i,17]),
+        param <- list(log_N = log(runif(1,0.01,2)*m), log_sigma = log(runif(1,0.5,2) * output$sigma_scr[i]),
                       logit_d = runif(1,-4,1), log_beta = runif(1,-1,1), log_lambda0 = runif(1,-10,-4))
         
         obj <- TMB::MakeADFun(data = data, parameters = param, 
@@ -179,9 +170,9 @@ for(i in 1:nrow(pars)){
         
         
         if (opt$objective < NLL){
-          coefsp = stelfi::get_coefs(obj)
-          if (coefsp[1,1] < 1000){
-            coefs <- coefsp
+          coefsr = stelfi::get_coefs(obj)
+          if (coefsr[1,1] < 1000){
+            coefs <- coefsr
             NLL = opt$objective
           }
         }
@@ -193,7 +184,8 @@ for(i in 1:nrow(pars)){
   }
   t1 <- Sys.time()
   output$runtime[i] <- as.numeric(difftime(t1,t0,units="mins"))
-  output$run[i] <- 4000.20
+  output$runs[i] <- runs
+  output$mask_size[i] <- mask_size
   
   out_results <- tryCatch(
     {

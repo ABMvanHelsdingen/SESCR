@@ -1,14 +1,14 @@
 # Fit SCR and SESCR to pregenerated data, using TMB and MLE
-# Last Updated: 13 November 2024
+# Last Updated: 26 February 2025
 
 # This block is designed to be run on the NeSI server
 args <- commandArgs(trailingOnly = TRUE)
 N <- as.numeric(args[1])
 
 # To be adjusted as appropriate
-n_sims <- 10
-source1 <- "OU" # name of folder for storing results (OU,PR or SCR)
-source2 <- "OUSCR" # name of folder where simulations stored (OUSCR, SESCR or SCR)
+n_sims <- 8
+source1 <- "PR" # name of folder for storing results (OU,PR or SCR)
+source2 <- "SESCR" # name of folder where simulations stored (OUSCR, SESCR or SCR)
 
 
 library(coda)
@@ -26,10 +26,9 @@ camera_locations = as.matrix(read.csv(paste(source2,"Sims/Cameras_",N,".csv",sep
 
 
 # Output Data frame
-output <- as.data.frame(matrix(0, nrow = nrow(pars), ncol = 31))
+output <- as.data.frame(matrix(0, nrow = nrow(pars), ncol = 27))
 names(output) <- c("n_cameras", "N_true", "t", "sigma_true", 
-                   "mu0_true", "beta_true", "d_true",
-                   "n_obs", "m", "C_obs", "m_1obs", "m_maxobs", "m_1C", "m_maxC",
+                   "mu0_true", "beta_true", "d_true", "n_obs", "m", "C_obs", 
                    "N_scr", "N_scr_se", "sigma_scr", "sigma_scr_se", "lambda0_scr",
                    "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "d",
                    "scr_ran", "N_better", "sigma_better", "ess_sigma", "runtime")
@@ -65,7 +64,7 @@ for(i in 1:nrow(pars)){
   
   # Summary of the Data
   output$n_cameras[i] <- nrow(camera_locations)
-  output$N_true[i] <- pars$M[i]
+  output$N_true[i] <- pars$N[i]
   output$t[i] <- pars$t[i]
   output$sigma_true[i] <- pars$sigma[i]
   
@@ -84,16 +83,6 @@ for(i in 1:nrow(pars)){
   output$n_obs[i] <- n
   output$m[i] <- m
   output$C_obs[i] <- length(unique(cameras))
-  
-  tab <- table(ids)
-  output$m_1obs[i] <- sum(tab == 1)
-  output$m_maxobs[i] <- max(tab)
-  
-  TWTable = table(ids, cameras) > 0
-  CPI = rowSums(TWTable) # cameras per individual
-  
-  output$m_1C[i] <- sum(CPI == 1)
-  output$m_maxC[i] <- max(CPI)
   
   out_scr <- tryCatch(
     {
@@ -136,17 +125,17 @@ for(i in 1:nrow(pars)){
                               ids = ids, bounds = bounds)
   M = 10 * m
   
-  initA = matrix(0, nrow = M, ncol = 2)
-  initA[,1] = runif(M,bounds[1],bounds[2]); initA[,2] = runif(M,bounds[3],bounds[4])
-  initA[1:m, ] = out$obsA
+  initAC = matrix(0, nrow = M, ncol = 2)
+  initAC[,1] = runif(M,bounds[1],bounds[2]); initAC[,2] = runif(M,bounds[3],bounds[4])
+  initAC[1:m, ] = out$obsAC
   
   
-  constants <- list(N = out$N, m = out$m, Nobs = length(times), area = out$area,
+  constants <- list(J = out$J, m = out$m, K = length(times), area = out$area,
                     bounds = bounds, camera_locations = camera_locations, M = M)
   
   
   initsList <- list(lambda0 = runif(1,0.009,0.027), beta = runif(1,0.2,1),  
-                    sigma = 3, Dratio = 0.5, a = initA, psi = 0.2, 
+                    sigma = 3, Dratio = 0.5, s = initAC, psi = 0.2, 
                     z = c(rep(1,m),rep(0,M - 2*m)))
   
   
@@ -168,9 +157,9 @@ for(i in 1:nrow(pars)){
   
   compiled <- compileNimble(Hmodel)
   configured <- configureMCMC(compiled, enableWAIC = TRUE, monitors = c("Nind", "Sigma", "Beta", "lambda0", "Dratio"))
-  configured$removeSamplers('a', print = FALSE)
+  configured$removeSamplers('s', print = FALSE)
   for(ani in 1:M){
-    configured$addSampler(target = paste('a[',ani,',1:2]',sep=""), type = 'RW_block',
+    configured$addSampler(target = paste('s[',ani,',1:2]',sep=""), type = 'RW_block',
                           control = list(adaptScaleOnly = TRUE),
                           silent = TRUE)
   }
