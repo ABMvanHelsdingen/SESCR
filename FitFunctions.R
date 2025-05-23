@@ -171,8 +171,6 @@ dSESCR_DA <- nimbleFunction(
     
     nll = nll - K * log(lambda0)
     
-    
-    
     # First two terms of NLL: Sum of the Integral of Lambda for all streams
     nll = nll + (sum(spike_sums) - sum(decay_sums)) * (lambda0 / beta) # spikes and decay areas
     nll = nll + sum(DF) * (lambda0 * duration) # baseline

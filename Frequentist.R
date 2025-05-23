@@ -6,14 +6,19 @@ S <- 1 # Set number for the simulations
 
 source1 <- "PR" # name of folder for storing results (OU,PR or SCR)
 source2 <- "SESCR" # name of folder where simulations stored (OUSCR, SESCR or SCR)
+mask_size <- 4000; runs <- 20
 
+## TMB templates
+if (!"MLEFunction" %in% getLoadedDLLs()){
+  TMB::compile("MLEFunction.cpp")
+  dyn.load(TMB::dynlib("MLEFunction"))
+}
 
 ## START OF SCRIPT ##
 set.seed(S)
 source("FitFunctions.R")
-library(coda)
 
-file_path = paste("SimStudy-",source1,"-DA/",sep="")
+file_path = paste("SimStudy-",source1,"-SCL/",sep="")
 dir.create(file_path)
 
 
@@ -22,11 +27,12 @@ camera_locations = as.matrix(read.csv(paste(source2,"Sims/Cameras_",S,".csv",sep
 
 
 # Output Data frame
-output <- as.data.frame(matrix(0, nrow = n_sims, ncol = 20))
-names(output) <- c("n_obs", "m", "C_obs", 
+output <- as.data.frame(matrix(0, nrow = n_sims, ncol = 23))
+names(output) <- c("n_obs", "m", "C_obs",
                    "N_scr", "N_scr_se", "sigma_scr", "sigma_scr_se", "lambda0_scr",
                    "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "d",
-                   "scr_ran", "N_better", "sigma_better", "ess_sigma", "runtime")
+                   "scr_ran", "N_better", "sigma_better", "mask_size", "runs","runtime",
+                   "NLL_SESCR", "NLL_SCR")
 
 
 trap_file = paste("traps_Sims_",S,".csv",sep="")
@@ -40,10 +46,11 @@ for(i in 1:n_sims){
   obs = read.csv(paste(source2,"Sims/Sim_Data_",identifier,".csv",sep=""))
   pars <- read.csv(paste(source2,"Sims/Pars_",S,".csv",sep=""))
   
-  # Capture Histories
+  # Capture histories
   times <- obs$times
   ids <- obs$ids
   cameras <- obs$cameras
+  
   
   m <- max(ids)
   n <- length(times)
@@ -51,7 +58,7 @@ for(i in 1:n_sims){
     next
   }
   
-  # Summary of the data
+  # Summary of the Data
   output$n_obs[i] <- n
   output$m[i] <- m
   output$C_obs[i] <- length(unique(cameras))
@@ -90,81 +97,82 @@ for(i in 1:n_sims){
     }
   )
 
-  # FIT WITH NIMBLE
+  # FIT IN TMB
+  
+  # Pre-Processing function
   out <- prepare_SESCR_NIMBLE(camera_locs = camera_locations, times = times, cameras = cameras,
-                              ids = ids, bounds = bounds)
-  
-  # Superpopulation
-  M = 10 * m
-  
-  initAC = matrix(0, nrow = M, ncol = 2)
-  initAC[,1] = runif(M,bounds[1],bounds[2]); initAC[,2] = runif(M,bounds[3],bounds[4])
-  initAC[1:m, ] = out$obsAC
+                              ids = ids, bounds = bounds, nrand=mask_size)
   
   
-  constants <- list(J = out$J, m = out$m, K = n, area = out$area,
-                    bounds = bounds, camera_locations = camera_locations, M = M)
-  
-  
-  # We start with random lambda0 and beta values. d and sigma fixed. 
-  # Starting true population is twice the number of observed animals
-  # Starting ACs are the empirical centroids for observed animals, random for the others. 
-  initsList <- list(lambda0 = runif(1,0.009,0.027), beta = runif(1,0.2,1),  
-                    sigma = 3, Dratio = 0.5, s = initAC, psi = 0.2, 
-                    z = c(rep(1,m),rep(0,M - 2*m)))
-  
-  
-  # The NIMBLE function requires:
-  # 1. event times and survey duration # 2. Camera IDs
-  # 3. Individual IDs # 4. last camera where individual captured was seen
-  events <- matrix(0, nrow = n + 1, ncol = 4)
-  events[, 1] <- c(times, pars$t[i])
-  events[, 2] <- c(cameras, 0)
-  events[, 3] <- c(ids, 0)
-  
+  # Calculate the last camera where the individual currently detected was seen at
+  events <- matrix(0, nrow = n + 1, ncol = 1)
   last_cameras <- numeric(m)
   for(j in 2:n){
     last_cameras[ids[(j-1)]] = cameras[(j-1)]
-    events[j, 4] <- last_cameras[ids[j]]
+    events[j, 1] <- last_cameras[ids[j]]
   }
   
-  data <- list(events = events)
+  # TMB/C++ indexes from 0, therefore 1 is subtracted from several vectors
+  data <- list(J = out$J, m = out$m, K = n, area = out$area,
+               camera_locations = camera_locations, times = c(times, pars$t[i]),
+               cameras = c(cameras, 0) - 1, animals = c(ids, 0) - 1, last_cameras = events[,1] - 1,
+               nrand = out$nrand, mask = out$rpts)
   
+  NLL <- Inf
   t0 <- Sys.time()
-  
-  # Setting up and configuring NIMBLE model
-  Hmodel <- nimbleModel(mcSESCR_DA, constants = constants, 
-                        data = data, inits = initsList)
-  
-  compiled <- compileNimble(Hmodel)
-  configured <- configureMCMC(compiled, monitors = c("Nind", "Sigma", "Beta", "lambda0", "Dratio"))
-  configured$removeSamplers('s', print = FALSE)
-  for(ani in 1:M){
-    configured$addSampler(target = paste('s[',ani,',1:2]',sep=""), type = 'RW_block',
-                          control = list(adaptScaleOnly = TRUE),
-                          silent = TRUE)
+  for(run in 1:runs){
+    
+    out_tmb <- tryCatch(
+      {
+        # random parameter starting points
+        param <- list(log_N = log(runif(1,0.01,2)*m), log_sigma = log(runif(1,0.5,2) * output$sigma_scr[i]),
+                      logit_d = runif(1,-4,1), log_beta = runif(1,-1,1), log_lambda0 = runif(1,-10,-4))
+        
+        obj <- TMB::MakeADFun(data = data, parameters = param, 
+                              DLL = "MLEFunction",  silent = TRUE)
+        opt <- stats::nlminb(obj$par, obj$fn, obj$gr,
+                             control = list(trace = FALSE))
+        
+        
+        if (opt$objective < NLL){
+          coefsr = stelfi::get_coefs(obj)
+          # Sometimes the MLEs diverge to nonsensical results
+          if (coefsr[1,1] < 1000){
+            coefs <- coefsr
+            NLL = opt$objective
+          }
+        }
+      }, error = function(cond){
+        print(cond)
+        print(run)
+      }
+    )
   }
-  
-  
-  built <- buildMCMC(configured)
-  mcmc <- compileNimble(built)
-  
-  # Run MCMC Chain in NIMBLE
-  mcmc.out <- runMCMC(mcmc = mcmc, niter = 16000, nchains = 1, nburnin = 6000, thin =4, 
-                      summary = TRUE)
   t1 <- Sys.time()
   output$runtime[i] <- as.numeric(difftime(t1,t0,units="mins"))
-  ess <- effectiveSize(mcmc.out$samples)
-  output$ess_sigma[i] <- ess[4]
+  output$runs[i] <- runs
+  output$mask_size[i] <- mask_size
   
-  # OUTPUT from NIMBLE
-  output$N[i] <- mcmc.out$summary[3,1]
-  output$N_se[i] <- mcmc.out$summary[3,3]
-  output$sigma[i] <- mcmc.out$summary[4,1]
-  output$sigma_se[i] <- mcmc.out$summary[4,3]
-  output$lambda0[i] <- mcmc.out$summary[5,1]
-  output$beta[i] <- mcmc.out$summary[1,1]
-  output$d[i] <- mcmc.out$summary[2,1]
+  # Save NLL of both SESCR and SCR
+  output$NLL_SESCR[i] <- NLL
+  output$NLL_SCR[i] <- obj$fn(c(log(output[i,4]),log(output[i,6]),0,10,
+                                log(output[i,8])))
+  
+  out_results <- tryCatch(
+    {
+      output$N[i] <- coefs[1,1]
+      output$N_se[i] <- coefs[1,2]
+      output$sigma[i] <- coefs[4,1]
+      output$sigma_se[i] <- coefs[4,2]
+      output$lambda0[i] <- coefs[3,1]
+      output$beta[i] <- coefs[2,1]
+      output$d[i] <- coefs[5,1]
+    }, error = function(cond){
+      print("No successful run")
+    }
+    
+  )
+  
   
   # binary indicators comparing SCR and SESCR
   if (!is.na(output$N[i]) && !is.na(output$N_scr[i])){
@@ -178,13 +186,8 @@ for(i in 1:n_sims){
       output$sigma_better[i] <- 1
     }
   }
-   
-
-  # OUTPUT after each iteration
-  write.csv(mcmc.out$summary, paste(file_path, "Summary_",identifier,".csv",sep=""))
-  write.csv(mcmc.out$samples, paste(file_path, "Samples_",identifier,".csv",sep=""))
   
+  # OUTPUT after each iteration
   write.csv(output, paste(file_path, "Results_",S,".csv",sep=""))
   print(i)
-
 }

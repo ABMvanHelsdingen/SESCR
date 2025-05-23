@@ -1,35 +1,33 @@
 # Simulate from OU process and save output
-# Last Updated: 31 October 2024
-args <- commandArgs(trailingOnly = TRUE)
-N <- as.numeric(args[1])
-n_sims <- 8
+# Last Updated: 23 May 2025
+
+n_sims <- 1000
+S <- 1 # study number
 
 ## START OF SCRIPT ##
-set.seed(2+10*N)
+set.seed(S)
 source("SimulateFunctions.R")
 dir.create("OUSCRSims")
 
-Ns <- 50; ts <- rep(seq(10,30,length.out=5),each=2)
-Cs <- 25; taus <- 0.2; sigmas <- 0.15; epsilon = 0.004
-bounds1 <- 0; bounds2 <- 1; bounds3 <- 0; bounds4 <- 1
+N <- 50; C <- 25
+t <- rep(seq(10,30,length.out=5),each=n_sims/5)
+bounds <- c(0,1,0,1)
+epsilon <- 0.004
+tau <- 0.2
+sigma <- 0.15
   
-pars <- data.frame(N = Ns, t = ts, C = Cs, tau = taus, sigma = sigmas,
-                    epsilon = epsilon, bounds1 = bounds1, bounds2 = bounds2, 
-                    bounds3 = bounds3, bounds4 = bounds4)
+pars <- data.frame(N = N, t = t, C = C, tau = tau, sigma = sigma,
+                    epsilon = epsilon, bounds1 = bounds[1], bounds2 = bounds[2], 
+                    bounds3 = bounds[3], bounds4 = bounds[4])
   
-traps <- secr::make.grid(nx = sqrt(Cs), ny = sqrt(Cs), spacing = 500/(sqrt(Cs) - 1))
-rownames(traps) = seq(1,Cs)
-camera_locations <- matrix(0, nrow = Cs, ncol = 2)
-camera_locations[,1] <- 0.25 + 0.001*traps[,1]; camera_locations[,2] <- 0.25 + 0.001*traps[,2]
-write.csv(camera_locations, paste("OUSCRSims/Cameras_",N,".csv",sep=""))
-write.csv(pars, paste("OUSCRSims/Pars_",N,".csv",sep=""))
+locs <- seq(0.25,0.75,length.out=sqrt(C))
+camera_locations <- matrix(unlist(expand.grid(locs, locs)), nrow = C, ncol = 2)
+write.csv(camera_locations, paste("OUSCRSims/Cameras_",S,".csv",sep=""))
+write.csv(pars, paste("OUSCRSims/Pars_",S,".csv",sep=""))
 
 
-
-
-for(i in 1:nrow(pars)){
-  identifier = paste(N,"_",i,sep="")
-  bounds = c(pars$bounds1[i], pars$bounds2[i], pars$bounds3[i], pars$bounds4[i])
+for(i in 1:n_sms){
+  identifier = paste(S,"_",i,sep="")
 
   centers <- matrix(0, nrow = pars$N[i], ncol = 2)
   centers[,1] <- runif(pars$N[i], bounds[1], bounds[2])

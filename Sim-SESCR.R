@@ -1,35 +1,33 @@
 # Simulate from SESCR Model and save output
-# Last Updated: 8 November 2024
-args <- commandArgs(trailingOnly = TRUE)
-N <- as.numeric(args[1])
-n_sims <- 8
+# Last Updated: 23 May 2025
+
+n_sims <- 1000
+S <- 1 # study number
 
 ## START OF SCRIPT ##
-set.seed(2+10*N)
+set.seed(S)
 source("SimulateFunctions.R")
 dir.create("SESCRSims")
 
-Ns <- 50; ts <- 10
-Cs <- 25; mu0s <- runif(n_sims, 0.005,0.01)
-betas <- runif(n_sims,0.2,1); sigmas <- runif(n_sims,0.12,0.18); dratios <- runif(n_sims,0.2,0.5)
-bounds1 <- 0; bounds2 <- 1; bounds3 <- 0; bounds4 <- 1
+N <- 50; t <- 10; C <- 25
+bounds <- c(0,1,0,1)
+mu0 <- runif(n_sims, 0.005,0.01)
+beta <- runif(n_sims,0.2,1)
+sigma <- runif(n_sims,0.12,0.18)
+dratio <- runif(n_sims,0.2,0.5)
   
-pars <- data.frame(N = Ns, t = ts, C = Cs, mu0 = mu0s, beta = betas, sigma = sigmas,
-                     dratio = dratios, bounds1 = bounds1, bounds2 = bounds2, 
-                     bounds3 = bounds3, bounds4 = bounds4)
-  
-traps <- secr::make.grid(nx = sqrt(Cs), ny = sqrt(Cs), spacing = 500/(sqrt(Cs) - 1))
-rownames(traps) = seq(1,Cs)
-camera_locations <- matrix(0, nrow = Cs, ncol = 2)
-camera_locations[,1] <- 0.25 + 0.001*traps[,1]; camera_locations[,2] <- 0.25 + 0.001*traps[,2]
-write.csv(camera_locations, paste("SESCRSims/Cameras_",N,".csv",sep=""))
-write.csv(pars, paste("SESCRSims/Pars_",N,".csv",sep=""))
+pars <- data.frame(N = N, t = t, C = C, mu0 = mu0, beta = beta, sigma = sigma,
+                     dratio = dratio, bounds1 = bounds[1], bounds2 = bounds[2], 
+                     bounds3 = bounds[3], bounds4 = bounds[4])
+
+locs <- seq(0.25,0.75,length.out=sqrt(C))
+camera_locations <- matrix(unlist(expand.grid(locs, locs)), nrow = C, ncol = 2)
+write.csv(camera_locations, paste("SESCRSims/Cameras_",S,".csv",sep=""))
+write.csv(pars, paste("SESCRSims/Pars_",S,".csv",sep=""))
 
 
-
-for(i in 1:nrow(pars)){
-  identifier = paste(N,"_",i,sep="")
-  bounds = c(pars$bounds1[i], pars$bounds2[i], pars$bounds3[i], pars$bounds4[i])
+for(i in 1:n_sims){
+  identifier = paste(S,"_",i,sep="")
   
   centers <- matrix(0, nrow = pars$N[i], ncol = 2)
   centers[,1] <- runif(pars$N[i], bounds[1], bounds[2])

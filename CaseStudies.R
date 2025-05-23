@@ -1,6 +1,6 @@
 # Loads data from Case Studies and fits secr, SCL and DA SESCR
 # N = 1 is the American Martens data, 2 the Sitka deer and 3 the Belarus lynx
-# Last Updated: 26 February 2025
+# Last Updated: 23 May 2025
 
 N <- 2
 library(secr)
@@ -18,7 +18,7 @@ scales = as.matrix(read.csv("CS/scales.csv", header = FALSE))[N,]
 scale <- scales[1]; buffer = scales[2]; spacing = scales[3]
 
 # MCMC parameters
-thinf = 4; niter = 160; nburnin = 60
+thinf = 4; niter = 50000; nburnin = 10000
 
 ## create the mask over the region; different buffers were tested 
 ## until the estimated parameters remained stable
@@ -60,26 +60,23 @@ if (!"MLEFunction" %in% getLoadedDLLs()){
 
 runs <- 20
 m <- max(ids)
+n <- length(times)
 out <- prepare_SESCR_NIMBLE(camera_locs = camera_locations, times = times, cameras = cameras,
                             ids = ids)
 
-# Format data
-events <- matrix(0, nrow = length(times) + 1, ncol = 4)
-events[, 1] <- c(times, duration)
-events[, 2] <- c(cameras, 0)
-events[, 3] <- c(ids, 0)
+# Calculate the last camera where the individual currently detected was seen at
+events <- matrix(0, nrow = n + 1, ncol = 1)
 last_cameras <- numeric(m)
-for(j in 2:length(times)){
+for(j in 2:n){
   last_cameras[ids[(j-1)]] = cameras[(j-1)]
-  events[j, 4] <- last_cameras[ids[j]]
-  
+  events[j, 1] <- last_cameras[ids[j]]
 }
 
-data <- list(J = out$J, m = out$m, K = length(times) - 1, area = out$area,
-             camera_locations = camera_locations, times = events[,1],
-             cameras = events[,2] - 1, animals = events[,3] - 1, last_cameras = events[,4] - 1,
-             nrand = nrow(mask), mask = as.matrix(0.001*mask))
 
+data <- list(J = out$J, m = out$m, K = n, area = out$area,
+             camera_locations = camera_locations, times = c(times, pars$t[i]),
+             cameras = c(cameras, 0) - 1, animals = c(ids, 0) - 1, last_cameras = events[,1] - 1,
+             nrand = nrow(mask), mask = as.matrix(0.001*mask))
 
 NLL <- Inf
 t0 <- Sys.time()
@@ -99,6 +96,7 @@ for(run in 1:runs){
       
       if (opt$objective < NLL){
         coefsr = stelfi::get_coefs(obj)
+        # Sometimes the MLEs diverge to nonsensical results
         if (coefsr[1,1] < 10000){
           coefs <- coefsr
           NLL = opt$objective
@@ -158,7 +156,7 @@ Hmodel <- nimbleModel(mcSESCR_DA_Irregular, constants = constants,
                       data = data, inits = initsList)
 
 compiled <- compileNimble(Hmodel)
-configured <- configureMCMC(compiled, enableWAIC = TRUE, monitors = c("Nind", "Sigma", "Beta", "lambda0", "Dratio", "s",
+configured <- configureMCMC(compiled, monitors = c("Nind", "Sigma", "Beta", "lambda0", "Dratio", "s",
                                                                       "z"))
 configured$removeSamplers('s', print = FALSE)
 for(ani in 1:M){
@@ -171,7 +169,7 @@ for(ani in 1:M){
 built <- buildMCMC(configured)
 mcmc <- compileNimble(built)
 mcmc.out <- runMCMC(mcmc = mcmc, niter = niter, nchains = 1, nburnin = nburnin, thin =thinf, 
-                    summary = TRUE, WAIC = TRUE)
+                    summary = TRUE)
 
 t1 = Sys.time()
 
