@@ -1,8 +1,18 @@
-# Loads data from Case Studies and fits secr, SCL and DA SESCR
-# N = 1 is the American Martens data, 2 the Sitka deer
-# Last Updated: 28 May 2025
+# Loads data from Case Studies and fits secr, frequentist and DA SESCR
+# N = 1 is the American Martens data, 2 the Sitka deer, 3 the Nepal leopards
+# Last Updated: 20 August 2025
 
-N <- 2
+# Outputs for each case study are:
+# M: secr mask
+# A: SCR population estimates
+# B: SCR parameter estimates
+# C: SESCR frequentist parameter estimates
+# D: metadata about SCR and SESCR fitting
+# E: Summaries of MCMC chains for SESCR
+# F: full MCMC chains for SESCR
+# G: metadata about SESCR Data Augmentation fitting
+
+N <- 3
 library(secr)
 source("FitFunctions.R")
 
@@ -17,8 +27,8 @@ m <- max(ids)
 n <- length(times)
 
 # scaling factor from processing, buffer and spacing
-scales = as.matrix(read.csv("CS/scales.csv", header = FALSE))[N,]
-scale <- scales[1]; buffer = scales[2]; spacing = scales[3]
+scales = as.matrix(read.csv("CS/scales.csv", header = TRUE))[N,]
+buffer = scales[2]; spacing = scales[3]
 
 # MCMC fitting parameters
 thinf = 4; niter = 50000; nburnin = 10000
@@ -29,9 +39,10 @@ runs <- 20
 # Define trap locations and masks
 traps = data.frame(x = 1000*camera_locations[,1], y = 1000*camera_locations[,2])
 trap = make.poly(x=traps$x, y=traps$y)
-mask = make.mask(trap,buffer=buffer/scale,spacing=spacing/scale,type="trapbuffer")
+mask = make.mask(trap,buffer=buffer,spacing=spacing,type="trapbuffer")
 
 # Fit in secr
+t0 <- Sys.time()
 trap_file = paste("traps_Sims",N,".csv",sep="")
 capt_file = paste("capthist_Sims",N,".csv",sep="")
 write.table(1000*camera_locations, trap_file, sep=",", col.names=FALSE)
@@ -54,6 +65,9 @@ out_secr <- predict(fit)
 
 write.csv(out_secr, paste("CS/outputB",N,".csv",sep=""))
 
+t1 <- Sys.time()
+outputD = data.frame(runtime_scr = as.numeric(difftime(t1,t0,units="mins")),
+                     mask = nrow(mask), runs = runs, area = 0.01*maskarea(mask))
 
 # SESCR
 
@@ -63,7 +77,7 @@ if (!"SCLFunction" %in% getLoadedDLLs()){
   dyn.load(TMB::dynlib("SCLFunction"))
 }
 
-out <- prepare_SESCR_NIMBLE(camera_locs = camera_locations, times = times, cameras = cameras,
+out <- prepare_SESCR(camera_locs = camera_locations, times = times, cameras = cameras,
                             ids = ids)
 
 # The NIMBLE and TMB functions require:
@@ -81,7 +95,7 @@ for(j in 2:n){
 }
 
 
-data <- list(J = out$J, m = out$m, K = n, area = out$area,
+data <- list(J = out$J, m = m, K = n, area = 0.01*maskarea(mask),
              camera_locations = camera_locations, times = events[,1],
              cameras = events[,2] - 1, animals = events[,3] - 1, last_cameras = events[,4] - 1,
              nrand = nrow(mask), mask = as.matrix(0.001*mask))
@@ -103,11 +117,11 @@ for(run in 1:runs){
       
       
       if (opt$objective < NLL){
-        coefsr = stelfi::get_coefs(obj)
+        coefsr <- summary(TMB::sdreport(obj), "report") 
         # Occasionally the MLEs diverge to nonsensical results
         if (coefsr[1,1] < 1000){
           coefs <- coefsr
-          NLL = opt$objective
+          NLL <- opt$objective
         }
       }
     }, error = function(cond){
@@ -127,36 +141,36 @@ out_results <- tryCatch(
   
 )
 
-outputD = data.frame(runtime = as.numeric(difftime(t1,t0,units="mins")),
-                     mask = nrow(mask), runs = runs)
-
+outputD$runtime <- as.numeric(difftime(t1,t0,units="mins"))
 write.csv(outputD, paste("CS/outputD",N,".csv",sep=""))
 
 # BAYESIAN FRAMEWORK
-mask = 0.001*mask
-a = min(mask[,1]); b = max(mask[,1])
-c = min(mask[,2]); d = max(mask[,2])
-bounds = c(a,b,c,d)
 
 # Prepare data, constants and initial values of parameters
 data <- list(events = events)
-M = 10 * m
+# Superpopulation size
+M = 8*m
 
-# Remove interior points of mask
-mask = verticesMask(mask)
+# Prepare mask, which is not identical to secr mask
+maskv = perimeterMask(mask)
+mask_bay <- as.matrix(0.001*maskv$perimeter)
 
-constants <- list(J = out$J, m = out$m, K = length(times), area = out$area,
+a = min(mask_bay[,1]); b = max(mask_bay[,1])
+c = min(mask_bay[,2]); d = max(mask_bay[,2])
+bounds = c(a,b,c,d)
+
+constants <- list(J = out$J, m = out$m, K = length(times), area = 1e-6 * maskv$area,
                   bounds = bounds, camera_locations = camera_locations, M = M,
-                  mask = as.matrix(mask))
+                  mask = mask_bay)
 
 
 initAC = matrix(0, nrow = M, ncol = 2)
 initAC[,1] = runif(M,a,b); initAC[,2] = runif(M,c,d)
 initAC[1:m, ] = out$obsAC
 
-
-initsList <- list(lambda0 = runif(1,0.0009,0.0027), beta = runif(1,1,5),  
-                  sigma = 3, Dratio = 0.5, s = initAC, psi = 0.2, 
+# Use MLEs as starting values for lambda0,beta and sigma.
+initsList <- list(lambda0 = coefs[3,1], beta = 1/coefs[2,1],  
+                  sigma = log(coefs[4,1]^-2 / 2), Dratio = 0.5, s = initAC, psi = 2*m/M, 
                   z = c(rep(1,m),rep(0,M - 2*m)))
 
 
@@ -187,7 +201,8 @@ t1 = Sys.time()
 write.csv(mcmc.out$summary, paste("CS/outputE",N,".csv",sep=""))
 write.csv(mcmc.out$samples, paste("CS/outputF",N,".csv",sep=""))
 
+
 # Save metadata about fitting
 outputG = data.frame(runtime = as.numeric(difftime(t1,t0,units="mins")),
-                     niter = niter, nburnin = nburnin, thinf = thinf)
+                     niter = niter, nburnin = nburnin, thinf = thinf, area = constants$area)
 write.csv(outputG, paste("CS/outputG",N,".csv",sep=""))
