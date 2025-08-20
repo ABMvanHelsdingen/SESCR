@@ -1,4 +1,11 @@
 # Functions for simulating SCR, OU and SESCR detections
+# SESCROgata(): simulates our SESCR model for a single individual
+# simSESCR(): simulates SESCR for multiple individuals, calls SESCROgata()
+# simSCR(): simulates traditional SCR for multiple individuals
+# sim.ou(): simulates a complete trajectory for a single individual whose movement follows the OU process
+# simOU(): simulates capture history for multiple individuals with OU movement, calls sim.ou()
+
+
 # Chen (2016a): https://www.math.fsu.edu/~ychen/research/Thinning%20algorithm.pdf
 # Chen (2016b): https://www.math.fsu.edu/~ychen/research/multiHawkes.pdf
 

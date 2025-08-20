@@ -1,27 +1,36 @@
 # Simulate from SESCR Model and save output
-# Last Updated: 23 May 2025
+# Last Updated: 14 August 2025
 
-n_sims <- 1000
-S <- 1 # study number
+n_sims <- 10
+S <- 1 # set number
 
 ## START OF SCRIPT ##
 set.seed(S)
 source("SimulateFunctions.R")
 dir.create("SESCRSims")
 
-N <- 50; t <- 10; C <- 25
-bounds <- c(0,1,0,1)
-mu0 <- runif(n_sims, 0.005,0.01)
-beta <- runif(n_sims,0.2,1)
-sigma <- runif(n_sims,0.12,0.18)
-dratio <- runif(n_sims,0.2,0.5)
-  
-pars <- data.frame(N = N, t = t, C = C, mu0 = mu0, beta = beta, sigma = sigma,
-                     dratio = dratio, bounds1 = bounds[1], bounds2 = bounds[2], 
-                     bounds3 = bounds[3], bounds4 = bounds[4])
+# Create grid of all parameter values and select 10 for this set
+pars <- expand.grid(beta = c(0.2,0.4,0.6,0.8,1), sigma = c(0.12,0.18),
+                    mu0 = c(0.005,0.01), dratio = c(0.25,0.5))
 
-locs <- seq(0.25,0.75,length.out=sqrt(C))
-camera_locations <- matrix(unlist(expand.grid(locs, locs)), nrow = C, ncol = 2)
+rem <- (S %% 4) + 1
+pars <- pars[(1 + 10*(rem - 1)): (10*rem), ]
+
+pars$N <- 50
+pars$t <- 10
+pars$C <- 25
+
+bounds <- c(0,1,0,1)
+pars$bounds1 <- bounds[1]
+pars$bounds2 <- bounds[2]
+pars$bounds3 <- bounds[3]
+pars$bounds4 <- bounds[4]
+
+# Camera locations
+locs <- seq(0.25,0.75,length.out=sqrt(pars$C[1]))
+camera_locations <- matrix(unlist(expand.grid(locs, locs)), nrow = pars$C[1], ncol = 2)
+
+# Save parameter values and camera locations
 write.csv(camera_locations, paste("SESCRSims/Cameras_",S,".csv",sep=""))
 write.csv(pars, paste("SESCRSims/Pars_",S,".csv",sep=""))
 
@@ -40,6 +49,7 @@ for(i in 1:n_sims){
   # Save simulation
   sim_data <- data.frame(times = obs$times, ids = obs$ids, cameras = obs$cameras)
   write.csv(sim_data, paste("SESCRSims/Sim_Data_",identifier,".csv",sep=""))
+  print(length(obs$times))
 }
 
 
