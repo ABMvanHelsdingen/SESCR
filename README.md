@@ -11,7 +11,7 @@ Both files save output as .csv files for later use.
 ## Case Studies
 The folder CS contains raw data for our two case studies found in Section 4 and Web Appendix E.
 *CaseStudies.R* fits SCR models in the `secr` package and our model in both frameworks.
-The user must change the variable *N* on line 5 to switch between the Martens (1) and Sitka deer (2).
+The user must change the variable *N* on line 5 to switch between the marten (1) and the leopard (3) case studies. Case Study 2 is not used by the paper. 
 
 ## Fitting
 *Frequentist.R* fits our SESCR model by semi-complete likelihood as described in Section 2.5.1.<br/> 
