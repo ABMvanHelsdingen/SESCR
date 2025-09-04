@@ -34,7 +34,7 @@ output <- as.data.frame(matrix(0, nrow = n_sims, ncol = 25))
 names(output) <- c("n_obs", "m", "C_obs",
                    "N_scr", "N_scr_se", "sigma_scr", "sigma_scr_se", "lambda0_scr",
                    "scr_ran", "runtime_scr", "NLL_SCR",
-                   "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "d",
+                   "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "r",
                    "sescr_ran", "runtime", "runs", "NLL_SESCR",
                    "N_better", "sigma_better", "mask_size")
 

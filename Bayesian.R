@@ -1,5 +1,5 @@
 # Fit SESCR to pregenerated data, in a Bayesian framework with NIMBLE
-# Last Updated: 17 August 2025
+# Last Updated: 1 September 2025
 
 S <- 1 # Set number for the simulations
 source <- "SESCR" # name of folder where simulations stored (OUSCR, SESCR or SCR)
@@ -22,12 +22,12 @@ camera_locations = as.matrix(read.csv(paste(source,"Sims/Cameras_",S,".csv",sep=
 
 
 # Output Data frame
-output <- as.data.frame(matrix(0, nrow = n_sims, ncol = 21))
+output <- as.data.frame(matrix(0, nrow = n_sims, ncol = 22))
 names(output) <- c("n_obs", "m", "C_obs",
                    "N_scr", "N_scr_se", "sigma_scr", "sigma_scr_se", "lambda0_scr",
                    "scr_ran", "runtime_scr",
-                   "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "d",
-                   "runtime", "ess_sigma",
+                   "N", "N_se", "sigma", "sigma_se", "lambda0", "beta", "r",
+                   "runtime", "ess_N", "ess_sigma",
                    "N_better", "sigma_better")
 
 
@@ -103,7 +103,7 @@ for(i in 1:n_sims){
   
   
   # Superpopulation size
-  M = 8*m
+  M = 250
 
   
   
@@ -118,7 +118,7 @@ for(i in 1:n_sims){
   
   # Starting true population is twice the number of observed animals
   initsList <- list(lambda0 = 0.05, beta = 1,  
-                    sigma = 3, Dratio = 0.5, s = initAC, psi = 2*m/M, 
+                    sigma = 3, d = sqrt(1/(8*exp(3))), s = initAC, psi = 2*m/M, 
                     z = c(rep(1,m),rep(0,M - 2*m)))
   
   
@@ -168,9 +168,10 @@ for(i in 1:n_sims){
   output$sigma_se[i] <- mcmc.out$summary[4,3]
   output$lambda0[i] <- mcmc.out$summary[5,1]
   output$beta[i] <- mcmc.out$summary[1,1]
-  output$d[i] <- mcmc.out$summary[2,1]
+  output$r[i] <- mcmc.out$summary[2,1]
   
   output$runtime[i] <- as.numeric(difftime(t1,t0,units="mins"))
+  output$ess_N[i] <- effectiveSize(mcmc.out$samples)[3]
   output$ess_sigma[i] <- effectiveSize(mcmc.out$samples)[4]
   
   # binary indicators comparing SCR and SESCR

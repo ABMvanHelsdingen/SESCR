@@ -68,7 +68,7 @@ dSESCR_DA <- nimbleFunction(
                  psi = double(0), # probability that unobserved animals exist
                  lambda0 = double(0), # detection rate at ac for the baseline
                  beta = double(0), # self-excitement decay rate
-                 Dratio = double(0), # d/sigma
+                 Dratio = double(0), # denoted as r (ratio) in the manuscript
                  s = double(2), # activity centers
                  sigma = double(0), # Home Range Covariance
                  log = integer(0, default = 0)) {
@@ -207,8 +207,11 @@ mcSESCR_DA <- nimbleCode({
   psi ~ dbeta(1,1)
   lambda0 ~ dunif(1e-20, 1)
   beta ~ dunif(1e-10, 1000)
-  Dratio ~ dunif(1e-10, 1)
+  #Dratio ~ dunif(1e-10, 1)
   sigma ~ dunif(log(0.5/area), 10)
+  Sigma <- sqrt(1/(2*exp(sigma)))
+  d ~ dunif(1e-10, Sigma)
+  Dratio <- d/Sigma
   
   for(i in 1:(M-m)){
     z[i] ~ dbern(psi)
@@ -216,7 +219,7 @@ mcSESCR_DA <- nimbleCode({
   
   
   # Likelihood
-  Sigma <- sqrt(1/(2*exp(sigma)))
+  #Sigma <- sqrt(1/(2*exp(sigma)))
   Beta <- 1/beta
   events[,] ~ dSESCR_DA(J = J, m = m, K = K, camera_locations = camera_locations[,],
                          z = z[], M = M, psi = psi, lambda0 = lambda0, beta = Beta,
@@ -346,7 +349,7 @@ dSESCR_DA_Irregular <- nimbleFunction(
                  psi = double(0), # probability that unobserved animals exist
                  lambda0 = double(0), # detection rate at ac for the baseline
                  beta = double(0), # self-excitement decay rate
-                 Dratio = double(0), # d/sigma
+                 Dratio = double(0), # denoted as r (ratio) in the manuscript
                  s = double(2), # activity centers
                  sigma = double(0), # Home Range Covariance
                  mask = double(2), #secr mask defining the survey area
@@ -494,8 +497,10 @@ mcSESCR_DA_Irregular <- nimbleCode({
   psi ~ dbeta(1,1)
   lambda0 ~ dunif(1e-20, 1)
   beta ~ dunif(1e-10, 1000)
-  Dratio ~ dunif(1e-10, 1)
   sigma ~ dunif(log(0.5/area), 10)
+  Sigma <- sqrt(1/(2*exp(sigma)))
+  d ~ dunif(1e-10, Sigma)
+  Dratio <- d/Sigma
   
   for(i in 1:(M-m)){
     z[i] ~ dbern(psi)
@@ -503,7 +508,6 @@ mcSESCR_DA_Irregular <- nimbleCode({
   
   
   # Likelihood
-  Sigma <- sqrt(1/(2*exp(sigma)))
   Beta <- 1/beta
   events[,] ~ dSESCR_DA_Irregular(J = J, m = m, K = K, camera_locations = camera_locations[,],
                          z = z[], M = M, psi = psi, lambda0 = lambda0, beta = Beta,

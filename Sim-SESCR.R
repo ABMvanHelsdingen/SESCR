@@ -11,7 +11,7 @@ dir.create("SESCRSims")
 
 # Create grid of all parameter values and select 10 for this set
 pars <- expand.grid(beta = c(0.2,0.4,0.6,0.8,1), sigma = c(0.12,0.18),
-                    mu0 = c(0.005,0.01), dratio = c(0.25,0.5))
+                    mu0 = c(0.005,0.01), r = c(0.25,0.5))
 
 rem <- (S %% 4) + 1
 pars <- pars[(1 + 10*(rem - 1)): (10*rem), ]
@@ -42,7 +42,8 @@ for(i in 1:n_sims){
   centers[,1] <- runif(pars$N[i], bounds[1], bounds[2])
   centers[,2] <- runif(pars$N[i], bounds[3], bounds[4])
   Sigma = matrix(c(pars$sigma[i] ^ 2, 0,0,pars$sigma[i] ^2), nrow = 2)
-  d = (pars$dratio[i] ^2) * Sigma
+  # Here d refers to the variance of the self-excitement in space
+  d = (pars$r[i] ^2) * Sigma
   obs <- simSESCR(N = pars$N[i], mu0 = pars$mu0[i], beta = pars$beta[i], 
                         d = d, sigma = Sigma, camera_locations = camera_locations, t = pars$t[i],
                         s = centers)

@@ -170,7 +170,7 @@ initAC[1:m, ] = out$obsAC
 
 # Use MLEs as starting values for lambda0,beta and sigma.
 initsList <- list(lambda0 = coefs[3,1], beta = 1/coefs[2,1],  
-                  sigma = log(coefs[4,1]^-2 / 2), Dratio = 0.5, s = initAC, psi = 2*m/M, 
+                  sigma = log(coefs[4,1]^-2 / 2), d = coefs[4,1]/2, s = initAC, psi = 2*m/M, 
                   z = c(rep(1,m),rep(0,M - 2*m)))
 
 
