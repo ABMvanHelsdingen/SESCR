@@ -157,7 +157,7 @@ for(i in 1:n_sims){
   mcmc <- compileNimble(built)
   
   # Run MCMC Chain in NIMBLE
-  mcmc.out <- runMCMC(mcmc = mcmc, niter = 20000, nchains = 1, nburnin = 10000, thin =4, 
+  mcmc.out <- runMCMC(mcmc = mcmc, niter = 30000, nchains = 1, nburnin = 10000, thin =8, 
                       summary = TRUE)
   t1 <- Sys.time()
   
