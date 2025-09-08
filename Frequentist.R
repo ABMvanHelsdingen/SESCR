@@ -138,9 +138,9 @@ for(i in 1:n_sims){
         
         
         if (opt$objective < NLL){
-          coefs <- summary(TMB::sdreport(obj), "report")  
+          coefsr <- summary(TMB::sdreport(obj), "report")  
           # Occasionally the MLEs diverge to nonsensical results
-          if ((coefsr[1,1] < 1000) & (coefsr[4,1] < 1)){
+          if ((coefsr[1,1] < 1000) & (coefsr[4,1] < 1) & (!is.infinite(opt$objective))){
             output$sescr_ran[i] <- 1 # success flag
             coefs <- coefsr
             NLL <- opt$objective
