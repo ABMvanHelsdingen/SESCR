@@ -207,7 +207,6 @@ mcSESCR_DA <- nimbleCode({
   psi ~ dbeta(1,1)
   lambda0 ~ dunif(1e-20, 1)
   beta ~ dunif(1e-10, 1000)
-  #Dratio ~ dunif(1e-10, 1)
   sigma ~ dunif(log(0.5/area), 10)
   Sigma <- sqrt(1/(2*exp(sigma)))
   d ~ dunif(1e-10, Sigma)
@@ -219,7 +218,6 @@ mcSESCR_DA <- nimbleCode({
   
   
   # Likelihood
-  #Sigma <- sqrt(1/(2*exp(sigma)))
   Beta <- 1/beta
   events[,] ~ dSESCR_DA(J = J, m = m, K = K, camera_locations = camera_locations[,],
                          z = z[], M = M, psi = psi, lambda0 = lambda0, beta = Beta,

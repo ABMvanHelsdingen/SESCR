@@ -167,7 +167,7 @@ for(i in 1:n_sims){
   output$sigma_se[i] <- coefs[4,2]
   output$lambda0[i] <- coefs[3,1]
   output$beta[i] <- coefs[2,1]
-  output$d[i] <- coefs[5,1]
+  output$r[i] <- coefs[5,1]
   
   output$runs[i] <- runs
   output$mask_size[i] <- size^2

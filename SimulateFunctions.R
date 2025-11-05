@@ -6,8 +6,8 @@
 # simOU(): simulates capture history for multiple individuals with OU movement, calls sim.ou()
 
 
-# Chen (2016a): https://www.math.fsu.edu/~ychen/research/Thinning%20algorithm.pdf
-# Chen (2016b): https://www.math.fsu.edu/~ychen/research/multiHawkes.pdf
+# Chen (2016): https://web.archive.org/web/20240502132513/https://www.math.fsu.edu/~ychen/research/multiHawkes.pdf
+# Laub (2014): https://laub.au/pdfs/honours_thesis.pdf
 
 library(IHSEP)
 library(mvtnorm)
@@ -15,13 +15,14 @@ library(spatstat.geom)
 
 ### SESCR ###
 
-SESCROgata <- function(mu, alpha, beta, d, stream, mu0, N, t){
-  # Custom Ogata algorithm for SESCR model
-  # following Chen (2016a)
-  # using the definition of A in Laub (2014) and stelfi
+SESCROgata <- function(mu, alpha = 1, beta, d, stream, mu0, N, t){
+  # Custom Ogata algorithm for one individual in an SESCR model
+  # This is a thinning algorithm, we simulate event times assuming the maximum possible
+  # intensities, then remove some points to account for the lower intensities that actually occur. 
+  # following Chen (2016) and the definition of A in Laub (2014)
   
   # mu: baseline rate for each stream
-  # alpha: strength of self-excitement, scalar between 0 and 1
+  # alpha: fixed at 1 for the SESCR model
   # beta: temporal decay of self-excitement
   # d: self-excitement over space (NxN)
   # mu0: volume of baseline rate across all streams
@@ -35,32 +36,34 @@ SESCROgata <- function(mu, alpha, beta, d, stream, mu0, N, t){
     stop("alpha, beta, mu0 must be a scalar")
   }
   
-  # following Chen (2016b)
-  # using the definition of A in Laub (2014) and stelfi
-  
-  # calculate maximum intensity of each stream
+  # calculate maximum intensity of each stream/camera
   max_lambda = numeric(N)
   for(i in 1:N){
     max_lambda[i] = mu[i] + (alpha * mu0 * d[i,i])
   }
   lambda_bar = sum(max_lambda)
-  times = numeric(0)
-  streams = numeric(0)
+  
+  times = numeric(0); streams = numeric(0)
   s = 0; n = 0; A = 0
   lambda_s = mu
   last_event = 0 # stream of last event
   while (s < t){
     u <- runif(1)
     w <- -1*log(u)/lambda_bar
-    s <- s + w
-    D <- runif(1)
-    if (n > 0){
-      A <- exp(-beta*(s-max(times))) # Markovian
-      # lambda_s is intensity at candidate point s
+    s <- s + w # candidate event
+    if (n > 0){ # When n=0, no prior events
+      # Markovian, no sum across all prior events
+      A <- exp(-beta*(s-max(times)))
       for(i in 1:N){
+        # lambda_s is intensity at candidate point s
         lambda_s[i] = ((1 - alpha * A) * mu[i]) + (alpha * A * mu0 * d[i, last_event])
       }
     }
+    
+    # We generate a random number D, if D multiplied by the sum of the maximum intensities 
+    # exceeds the sum of the current intensities, the candidate event is thinned.
+    # Otherwise, the probability that an event is assigned to each stream is proportional to their intensities
+    D <- runif(1)
     if (D*lambda_bar <= sum(lambda_s)){
       k = 1
       while(D*lambda_bar > sum(lambda_s[1:k])){
@@ -82,7 +85,7 @@ SESCROgata <- function(mu, alpha, beta, d, stream, mu0, N, t){
   }
 }
 
-# Simulate SESCR model (with exponential kernels)
+# Simulate SESCR model
 
 simSESCR <- function(N, mu0, beta, d, sigma, camera_locations, t,
                        s = NULL){
@@ -232,25 +235,24 @@ simSCR <- function(N, mu0, sigma, camera_locations, t,
 }
 
 ### OU Process ###
-sim.ou <- function(mu, tau, sigma, n.steps, start = NULL){
+sim.ou <- function(mu, beta, sigma, n.steps, start = NULL){
   if (is.null(start)){
     start <- rmvnorm(1, mu, sigma^2*diag(2))
   }
-  ## Changing Theo's parameterisation.
-  b <- -1/tau
+  
   v <- sigma^2
   out <- matrix(0, nrow = n.steps, ncol = 2)
   out[1, ] <- start
   for (i in 2:n.steps){
-    out[i, ] <- rmvnorm(1, mu + exp(b)*(out[i - 1, ] - mu),
-                        v*(1 - exp(2*b))*diag(2))
+    out[i, ] <- rmvnorm(1, mu + exp(-beta)*(out[i - 1, ] - mu),
+                        v*(1 - exp(-2*beta))*diag(2))
     
   }
   out
 }
 
-simOU <- function(N, epsilon=0.004, tau=100, sigma=0.2, camera_locations, t,
-                  s = NULL, freq = 10, mode = 1){
+simOU <- function(N, epsilon=0.004, beta=1, sigma=0.2, camera_locations, t,
+                  s = NULL, freq = 10){
   
   # Simulate activity centers (unless provided)
   if (length(s) == 0){
@@ -261,32 +263,20 @@ simOU <- function(N, epsilon=0.004, tau=100, sigma=0.2, camera_locations, t,
   cameras <- numeric(0)
   animals <- numeric(0)
   n <- 0
-  if (mode == 1){ # Every 1/freq units, animals are observed, jitter applied
-    for(i in 1:N){
-      locs <- sim.ou(mu = s[i,], tau = tau * freq, sigma = sigma, n.steps = freq * t)
-      dists <- crossdist(locs[, 1], locs[, 2], camera_locations[, 1], camera_locations[, 2])
-      dets <- which(dists < epsilon, arr.ind = TRUE)
-      dets[,1] <- (dets[,1] + runif(nrow(dets),-1,0))/freq
-      if (nrow(dets) > 0){
-        n <- n + 1
-        times <- append(times, dets[,1])
-        cameras <- append(cameras, dets[,2])
-        animals <- append(animals, rep(n, nrow(dets)))
-      }
-    }
-  } else { # The animals are observed at a rate of freq
-    for(i in 1:N){
-      locs <- sim.ou2(mu = s[i,], tau = freq * tau, sigma = sigma, n.steps = freq * t)
-      dists <- crossdist(locs[, 1], locs[, 2], camera_locations[, 1], camera_locations[, 2])
-      dets <- which(dists < epsilon, arr.ind = TRUE)
-      if (nrow(dets) > 0){
-        n <- n + 1
-        times <- append(times, locs[dets[,1], 3]/freq)
-        cameras <- append(cameras, dets[,2])
-        animals <- append(animals, rep(n, nrow(dets)))
-      }
+  # Every 1/freq time units, animals are observed, jitter applied
+  for(i in 1:N){
+    locs <- sim.ou(mu = s[i,], beta = beta / freq, sigma = sigma, n.steps = freq * t)
+    dists <- crossdist(locs[, 1], locs[, 2], camera_locations[, 1], camera_locations[, 2])
+    dets <- which(dists < epsilon, arr.ind = TRUE)
+    dets[,1] <- (dets[,1] + runif(nrow(dets),-1,0))/freq
+    if (nrow(dets) > 0){
+      n <- n + 1
+      times <- append(times, dets[,1])
+      cameras <- append(cameras, dets[,2])
+      animals <- append(animals, rep(n, nrow(dets)))
     }
   }
+  
   times_order = order(times, decreasing = FALSE)
   times <- times[times_order]
   cameras <- cameras[times_order]
