@@ -142,7 +142,7 @@ simSESCR <- function(N, lambda0, beta, d, sigma, camera_locations, t,
     for(j in 1:J){
       distance <- camera_locations[j, ] - s[i, ]
       d2 <- sum(distance^2)
-      mus[j] <- exp(-distance^2 / (2 * sigma^2))
+      mus[j] <- exp(-d2 / (2 * sigma^2))
     }
 
     mus <- lambda0 * mus
@@ -209,7 +209,7 @@ simSCR <- function(N, lambda0, sigma, camera_locations, t,
     for(j in 1:J){
       distance <- camera_locations[j, ] - s[i, ]
       d2 <- sum(distance^2)
-      mus[j] <- exp(-distance^2 / (2 * sigma^2))
+      mus[j] <- exp(-d2 / (2 * sigma^2))
     }
     mus <- lambda0 * mus
     
