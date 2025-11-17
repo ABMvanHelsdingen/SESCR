@@ -1,5 +1,5 @@
 # Simulate from SESCR Model and save output
-# Last Updated: 14 August 2025
+# Last Updated: 17 November 2025
 
 n_sims <- 10
 S <- 1 # set number
@@ -41,11 +41,11 @@ for(i in 1:n_sims){
   centers <- matrix(0, nrow = pars$N[i], ncol = 2)
   centers[,1] <- runif(pars$N[i], bounds[1], bounds[2])
   centers[,2] <- runif(pars$N[i], bounds[3], bounds[4])
-  Sigma = matrix(c(pars$sigma[i] ^ 2, 0,0,pars$sigma[i] ^2), nrow = 2)
+  sigma = pars$sigma[i]
   # Here d refers to the variance of the self-excitement in space
-  d = (pars$r[i] ^2) * Sigma
-  obs <- simSESCR(N = pars$N[i], mu0 = pars$mu0[i], beta = pars$beta[i], 
-                        d = d, sigma = Sigma, camera_locations = camera_locations, t = pars$t[i],
+  d = pars$r[i] * sigma
+  obs <- simSESCR(N = pars$N[i], lambda0 = pars$mu0[i] / (2 * pi * sigma^2), beta = pars$beta[i], 
+                        d = d, sigma = sigma, camera_locations = camera_locations, t = pars$t[i],
                         s = centers)
   # Save simulation
   sim_data <- data.frame(times = obs$times, ids = obs$ids, cameras = obs$cameras)

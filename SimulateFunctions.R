@@ -87,14 +87,14 @@ SESCROgata <- function(mu, alpha = 1, beta, d, stream, mu0, N, t){
 
 # Simulate SESCR model
 
-simSESCR <- function(N, mu0, beta, d, sigma, camera_locations, t,
+simSESCR <- function(N, lambda0, beta, d, sigma, camera_locations, t,
                        s = NULL){
   
   # N: true population
-  # mu0: baseline background detection rate for the MHP
+  # lambda0: baseline background detection rate for the MHP
   # beta: rate of temporal decay in self-excitement
-  # d: covariance for SE between cameras (2x2)
-  # sigma: covariance for activity ranges (2x2)
+  # d: sd for spatial self-excitement
+  # sigma: sd for home ranges
   # camera_locations: locations of cameras (Jx2)
   # t: latest possible detection time
   # s: activity centers (Nx2)
@@ -109,30 +109,22 @@ simSESCR <- function(N, mu0, beta, d, sigma, camera_locations, t,
   if(ncol(camera_locations) != 2){
     stop("camera_locations must be a Jx2 matrix")
   }
-  if(nrow(sigma) != 2 || ncol(sigma) != 2){
-    stop("sigma must be a 2x2 matrix")
-  }
-  if(sigma[1,1] != sigma[2,2] || sigma[1,2] != sigma[2,1]){
-    stop("sigma must have equal variance in x and y directions
-         and zero covariance")
-  }
-  if(nrow(d) != 2 || ncol(d) != 2){
-    stop("d must be a 2x2 matrix")
-  }
-  if(d[1,1] != d[2,2] || d[1,2] != d[2,1]){
-    stop("d must have equal variance in x and y directions
-         and zero covariance")
+  
+  if(length(sigma) != 1 || length(d) != 1){
+    stop("sigma and d must be scalars")
   }
   
   J <- nrow(camera_locations)
   n <- 0 # number of animals with observations
+  
   
   # Calculate spatial self-excitement
   sse <- matrix(0, nrow = J, ncol = J)
   for(x in 1:J){
     for(y in 1:x){
       distance <- camera_locations[x, ] - camera_locations[y, ]
-      sse[x,y] <- mnormt::dmnorm(x = distance, varcov = d)
+      d2 <- sum(distance^2)
+      sse[x,y] <- exp(-d2 / (2 * d^2)) * (sigma^2 / d^2)
       sse[y,x] <- sse[x,y] # sse is symmetric
     }
   }
@@ -149,13 +141,15 @@ simSESCR <- function(N, mu0, beta, d, sigma, camera_locations, t,
     mus <- numeric(J)
     for(j in 1:J){
       distance <- camera_locations[j, ] - s[i, ]
-      mus[j] <- mnormt::dmnorm(x = distance, varcov = sigma)
+      d2 <- sum(distance^2)
+      mus[j] <- exp(-distance^2 / (2 * sigma^2))
     }
-    mus <- mu0 * mus
+
+    mus <- lambda0 * mus
     
     # Generate MHP
     result <- SESCROgata(mu = mus, alpha = 1, beta = beta, 
-                         d = sse, mu0 = mu0, N = J, t = t)
+                         d = sse, mu0 = lambda0, N = J, t = t)
     if (length(result$times) > 0){ # If animal is detected
       n <- n + 1
       observed <- append(observed, n)
@@ -172,7 +166,7 @@ simSESCR <- function(N, mu0, beta, d, sigma, camera_locations, t,
 }
 
 ### SCR ###
-simSCR <- function(N, mu0, sigma, camera_locations, t,
+simSCR <- function(N, lambda0, sigma, camera_locations, t,
                    s = NULL){
   # Simulate Continuous-Time SCR
   # Study area is a unit square from (0,0) to (1,1)
@@ -186,15 +180,17 @@ simSCR <- function(N, mu0, sigma, camera_locations, t,
   }
   
   # check arguments
+  if (length(s) == 0){
+    s = matrix(runif(N*2,0,1), nrow=N, ncol=2)
+  }
+  
+  # check arguments
   if(ncol(camera_locations) != 2){
     stop("camera_locations must be a Jx2 matrix")
   }
-  if(nrow(sigma) != 2 || ncol(sigma) != 2){
-    stop("sigma must be a 2x2 matrix")
-  }
-  if(sigma[1,1] != sigma[2,2] || sigma[1,2] != sigma[2,1]){
-    stop("sigma must have equal variance in x and y directions
-         and zero covariance")
+  
+  if(length(sigma) != 1){
+    stop("sigma must be a scalar")
   }
   
   J <- nrow(camera_locations)
@@ -212,9 +208,10 @@ simSCR <- function(N, mu0, sigma, camera_locations, t,
     mus <- numeric(J)
     for(j in 1:J){
       distance <- camera_locations[j, ] - s[i, ]
-      mus[j] <- mnormt::dmnorm(x = distance, varcov = sigma)
+      d2 <- sum(distance^2)
+      mus[j] <- exp(-distance^2 / (2 * sigma^2))
     }
-    mus <- mu0 * mus
+    mus <- lambda0 * mus
     
     # Generate MHP
     result <- IHSEP::simPois(int = function(x){sum(mus)}, cens = t, int.M = sum(mus))

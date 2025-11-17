@@ -1,5 +1,5 @@
 # Simulate from traditional SCR and save output
-# Last Updated: 23 May 2025
+# Last Updated: 17 November 2025
 
 n_sims <- 1000
 S <- 1 # study number
@@ -30,9 +30,9 @@ for(i in 1:n_sims){
   centers <- matrix(0, nrow = pars$N[i], ncol = 2)
   centers[,1] <- runif(pars$N[i], bounds[1], bounds[2])
   centers[,2] <- runif(pars$N[i], bounds[3], bounds[4])
-  Sigma = matrix(c(pars$sigma[i] ^ 2, 0,0,pars$sigma[i] ^2), nrow = 2)
-  obs <- simSCR(N = pars$N[i], mu0 = pars$mu0[i],
-                      sigma = Sigma, camera_locations = camera_locations, t = pars$t[i],
+  sigma = pars$sigma[i]
+  obs <- simSCR(N = pars$N[i], lambda0 = pars$mu0[i] / (2 * pi * sigma^2),
+                      sigma = sigma, camera_locations = camera_locations, t = pars$t[i],
                       s = centers)
   # Save simulation
   sim_data <- data.frame(times = obs$times, ids = obs$ids, cameras = obs$cameras)
