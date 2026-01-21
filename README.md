@@ -1,5 +1,5 @@
 # SESCR
-`R` Code and Data for *A Spatial Capture-Recapture Model with Hawkes-inspired Detection Rates to account for Animal Movement*, 2025*
+`R` Code and Data for *A Spatial Capture-Recapture Model with Hawkes-inspired Detection Rates to account for Animal Movement*, 2026
 
 ## Case Studies
 The folder CS contains raw data for our two case studies found in Section 4 and Web Appendix E.
